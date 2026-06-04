@@ -440,6 +440,7 @@ function RouteView({ route, elevation, refresh }: { route: RoutePoint[]; elevati
         </div>
       </section>
 
+      {filter === 'Hazards' && <RiverCrossingWarning />}
       {mode === 'Map' ? <RouteMap route={visibleRoute} /> : mode === 'Elevation' ? <ElevationProfile elevation={elevation} route={route} /> : (
         <section className="grid gap-3">
           {visibleRoute.map((point) => <RouteCard point={point} key={point.id} refresh={refresh} />)}
@@ -480,6 +481,7 @@ function RouteCard({ point, refresh }: { point: RoutePoint; refresh: () => Promi
 
   return (
     <article className={`panel ${point.variant !== 'main' ? 'border-dashed' : ''}`}>
+      {point.kind === 'hazard' && <RiverCrossingWarning compact />}
       <div className="grid gap-3 lg:grid-cols-[auto_1fr_auto] lg:items-start">
         <label className="inline-flex items-center gap-2 text-sm font-semibold text-ink/70">
           <input className="h-5 w-5 accent-sage" type="checkbox" checked={point.done} onChange={(event) => update({ done: event.target.checked })} />
@@ -519,6 +521,17 @@ function RouteCard({ point, refresh }: { point: RoutePoint; refresh: () => Promi
         <input className="input lg:col-span-8" value={point.notes ?? ''} onChange={(event) => update({ notes: event.target.value })} />
       </div>
     </article>
+  )
+}
+
+function RiverCrossingWarning({ compact = false }: { compact?: boolean }) {
+  return (
+    <div className={`rounded-md border border-rust bg-rust/5 text-rust ${compact ? 'mb-4 p-3' : 'p-4'}`}>
+      <p className="text-xs font-semibold uppercase tracking-[0.16em]">River-crossing rule</p>
+      <p className="mt-2 text-sm leading-6 text-ink/80">
+        Do NOT cross if water is above your waist, or moving faster than your walking pace. If unsure — wait, camp, reassess, or turn back. Rakaia/Rangitata/Ahuriri are hazard zones — bypass by vehicle, never ford.
+      </p>
+    </div>
   )
 }
 
@@ -736,10 +749,13 @@ function GearView({ gear, refresh }: { gear: GearItem[]; refresh: () => Promise<
   const [draft, setDraft] = useState<GearItem>({ category: '', name: '', status: 'need' })
   const [filter, setFilter] = useState<GearFilter>('All')
   const visibleGear = gear.filter((item) => filter === 'All' || item.status === filter.toLowerCase())
-  const grouped = groupBy(visibleGear, (item) => item.category)
-  const allGrouped = groupBy(gear, (item) => item.category)
+  const visibleBaseGear = visibleGear.filter((item) => !item.optional)
+  const visibleOptionalGear = visibleGear.filter((item) => item.optional)
+  const grouped = groupBy(visibleBaseGear, (item) => item.category)
+  const allGrouped = groupBy(gear.filter((item) => !item.optional), (item) => item.category)
   const categoryWeights = Object.fromEntries(Object.entries(allGrouped).map(([category, items]) => [category, packWeight(items)]))
   const overall = packWeight(gear)
+  const optionalIfCarried = optionalWeight(gear)
 
   const add = async () => {
     if (!draft.category.trim() || !draft.name.trim()) return
@@ -750,7 +766,7 @@ function GearView({ gear, refresh }: { gear: GearItem[]; refresh: () => Promise<
 
   return (
     <section className="grid gap-5">
-      <FormPanel title={`Pack weight ${compactKg(overall)}`} kicker="Gear">
+      <FormPanel title={`Base pack weight ${compactKg(overall)} · optional if carried ${compactKg(optionalIfCarried)}`} kicker="Gear">
         <input className="input" placeholder="Category" value={draft.category} onChange={(event) => setDraft({ ...draft, category: event.target.value })} />
         <input className="input" placeholder="Item name" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
         <input className="input" type="number" placeholder="Weight g" value={draft.weightG ?? ''} onChange={(event) => setDraft({ ...draft, weightG: event.target.value ? Number(event.target.value) : undefined })} />
@@ -765,7 +781,7 @@ function GearView({ gear, refresh }: { gear: GearItem[]; refresh: () => Promise<
       <section className="panel flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="section-kicker">Filter</p>
-          <p className="mt-1 text-sm text-ink/60">{visibleGear.length} of {gear.length} gear items shown</p>
+          <p className="mt-1 text-sm text-ink/60">{visibleBaseGear.length} base + {visibleOptionalGear.length} optional of {gear.length} gear items shown</p>
         </div>
         <Segmented options={gearFilters} value={filter} onChange={(value) => setFilter(value as GearFilter)} />
       </section>
@@ -780,15 +796,33 @@ function GearView({ gear, refresh }: { gear: GearItem[]; refresh: () => Promise<
           </div>
         </section>
       ))}
+      {visibleOptionalGear.length > 0 && (
+        <section className="panel border-dashed bg-paper/55 text-ink/70">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-baseline sm:justify-between">
+            <div>
+              <p className="section-kicker">Optional</p>
+              <h2 className="font-serif text-xl">Optional / luxury (bounce, don't carry)</h2>
+            </div>
+            <p className="text-sm text-ink/55">{compactKg(optionalIfCarried)} if carried</p>
+          </div>
+          <div className="mt-4 grid gap-2">
+            {visibleOptionalGear.map((item) => <GearRow item={item} key={item.id} refresh={refresh} optional />)}
+          </div>
+        </section>
+      )}
     </section>
   )
 }
 
 function packWeight(items: GearItem[]) {
-  return items.filter((item) => item.status !== 'need').reduce((sum, item) => sum + (item.weightG ?? 0), 0)
+  return items.filter((item) => !item.optional && item.status !== 'need').reduce((sum, item) => sum + (item.weightG ?? 0), 0)
 }
 
-function GearRow({ item, refresh }: { item: GearItem; refresh: () => Promise<void> }) {
+function optionalWeight(items: GearItem[]) {
+  return items.filter((item) => item.optional && item.status !== 'need').reduce((sum, item) => sum + (item.weightG ?? 0), 0)
+}
+
+function GearRow({ item, refresh, optional = false }: { item: GearItem; refresh: () => Promise<void>; optional?: boolean }) {
   const update = async (changes: Partial<GearItem>) => {
     if (!item.id) return
     await db.gear.update(item.id, changes)
@@ -796,7 +830,7 @@ function GearRow({ item, refresh }: { item: GearItem; refresh: () => Promise<voi
   }
 
   return (
-    <article className="grid gap-2 rounded-md border border-line bg-bone/40 p-3 lg:grid-cols-[1fr_0.45fr_0.45fr_1fr_auto]">
+    <article className={`grid gap-2 rounded-md border border-line bg-bone/40 p-3 lg:grid-cols-[1fr_0.45fr_0.45fr_1fr_auto] ${optional ? 'text-sm opacity-80' : ''}`}>
       <input className="input" value={item.name} onChange={(event) => update({ name: event.target.value })} />
       <input className="input" type="number" placeholder="grams" value={item.weightG ?? ''} onChange={(event) => update({ weightG: event.target.value ? Number(event.target.value) : undefined })} />
       <select className="input" value={item.status} onChange={(event) => update({ status: event.target.value as GearStatus })}>

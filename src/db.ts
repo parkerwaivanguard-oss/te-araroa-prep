@@ -24,6 +24,7 @@ export interface GearItem {
   weightG?: number
   status: GearStatus
   notes?: string
+  optional?: boolean
 }
 
 export interface FundContribution {
@@ -144,7 +145,7 @@ export const defaultSettings: AppSettings = {
   fundTargetNZD: 12000,
   departureDate: '2027-11-01',
   finishDate: '2028-04-01',
-  seedVersion: 3,
+  seedVersion: 4,
 }
 
 export const workstreams: WorkstreamWindow[] = [
@@ -162,6 +163,7 @@ export const seedTasks: Task[] = [
   ['Fitness', 'Ramp to 3-5 day loaded multi-day walks (H1 2027)'],
   ['Fitness', 'Bibbulmun Track section hikes as TA dress rehearsal'],
   ['Fitness', 'Train trail-leg adaptation early (plan low daily km first 3 weeks)'],
+  ['Fitness', 'Practise loaded river crossings on Bibbulmun', "Technique: face upstream, poles for a tripod, unbuckle hip belt, don't cross above waist or faster than walking pace."],
   ['Gear', 'Research lightweight setup (shelter / sleep / pack)'],
   ['Gear', 'Buy core kit (H1 2027)'],
   ['Gear', 'Field-test all gear wet + loaded on Bibbulmun'],
@@ -170,8 +172,11 @@ export const seedTasks: Task[] = [
   ['Logistics', 'Buy Trail Pass (DOC huts + campsites discount)'],
   ['Logistics', 'Book flights Perth to Auckland + Cape Reinga transfer'],
   ['Logistics', 'Plan resupply boxes for remote South Island sections'],
-  ['Logistics', 'Apply for NZ Visitor Visa — long stay (thru-hike exceeds 3-month NZeTA limit) [HIGH PRIORITY]', 'Chinese passport + AU PR. NZeTA only allows 3 months; TA takes 4-6. Apply for a longer Visitor Visa in advance. Carry printed AU PR/RRV proof. Budget IVL + visa fee.'],
+  ['Logistics', 'Apply for NZ Visitor Visa — long stay (thru-hike exceeds 3-month NZeTA limit) [HIGH PRIORITY]', "Travel on HK SAR passport — it's visa-waiver (NZeTA, up to 90 days). A 5-month TA exceeds the 90-day cap, so apply for a long-stay Visitor Visa in advance (standard visa-waiver path — simpler/cheaper than the mainland-China route). Use the SAME passport for NZeTA, visa, and every NZ entry. NZeTA: max 6 months in any 12-month window."],
   ['Logistics', 'Sort satellite beacon (Garmin inReach / ZOLEO) + set scheduled check-in messages', '2-way + SOS. Test before departure; share tracking link with mother Li Ying.'],
+  ['Logistics', "Join that year's TA Facebook group + WhatsApp chain", 'Coordinate rides to Cape Reinga / 90 Mile Beach start; real-time trail + river conditions; meet other SOBO hikers.'],
+  ['Logistics', 'Pre-book overlapping/side-trip Great Walk huts (Tongariro, Kepler, Routeburn)', 'Book the moment bookings open — they fill months ahead.'],
+  ['Logistics', 'Buy onward/return flight evidence', 'One-way can be questioned at check-in/border even with a visa. Have proof of onward travel + funds.'],
   ['Finance', 'Open dedicated "TA Fund" account'],
   ['Finance', 'Reach NZD 12,000 target by departure'],
   ['Finance', 'Keep daily spend cap; route savings into TA Fund'],
@@ -334,9 +339,10 @@ export const seedGear: GearItem[] = [
   ['Pack', 'Trekking poles', 480, 'Big help on river crossings + descents.'],
   ['Shelter', 'Tent / shelter', 1100, 'Free-standing handy for hut overflow camping.'],
   ['Shelter', 'Tent stakes + guylines', 120, ''],
-  ['Sleep', 'Sleeping bag/quilt (comfort ~0°C)', 800, 'Snow possible even in Jan.'],
+  ['Sleep', 'Sleeping bag/quilt (comfort ~-5 to -7°C)', 950, '#1 investment — warm-when-wet. Real TA hikers found 0°C ratings too cold and upgraded mid-trail. Snow possible even in January.'],
   ['Sleep', 'Sleeping mat', 400, ''],
   ['Sleep', 'Inflatable pillow', 70, ''],
+  ['Sleep', 'Sleeping bag liner', 200, 'Keeps the bag clean over 5 months + a few extra degrees.'],
   ['Cook', 'Canister stove', 90, 'Gas sold at most resupply + outdoor stores.'],
   ['Cook', 'Pot 750ml', 130, ''],
   ['Cook', 'Lighter + backup', 30, ''],
@@ -345,6 +351,7 @@ export const seedGear: GearItem[] = [
   ['Water', 'Dirty + clean bottles/bladder', 180, ''],
   ['Water', 'Backup purification tablets', 20, ''],
   ['Clothing (worn)', 'Trail runners', 0, 'Carry 1-2 spare pairs over the trip.'],
+  ['Clothing (worn)', 'Injinji toe socks (x3)', 150, 'Blister prevention — near-universal TA pick. Pair with quick-dry trail runners.'],
   ['Clothing (worn)', 'Hiking socks (x3)', 150, ''],
   ['Clothing (worn)', 'Shorts / hiking pants', 250, ''],
   ['Clothing (worn)', 'Sun shirt (long sleeve)', 180, ''],
@@ -355,6 +362,7 @@ export const seedGear: GearItem[] = [
   ['Clothing (packed)', 'Thermal top + bottom', 350, ''],
   ['Clothing (packed)', 'Warm hat + gloves', 120, ''],
   ['Clothing (packed)', 'Gaiters', 160, 'Mud + scree.'],
+  ['Footwear', 'Camp shoes (Crocs)', 300, 'Camp, river crossings, give the feet a break.'],
   ['Electronics', 'Phone', 200, 'Primary nav (FarOut/Guthook).'],
   ['Electronics', 'Power bank 10000mAh', 220, ''],
   ['Electronics', 'Charging cables + plug', 120, ''],
@@ -373,11 +381,15 @@ export const seedGear: GearItem[] = [
   ['Docs/Admin', 'TA Trail Pass (DOC huts/campsites)', 0, 'Buy before season; carry confirmation.'],
   ['Docs/Admin', 'Bank card + cash (NZD)', 30, ''],
   ['Docs/Admin', 'Travel + rescue insurance proof', 0, 'Confirm it covers backcountry + heli evac.'],
-].map(([category, name, weightG, notes]) => ({
+  ['Misc', 'Big clothespins (x4-6)', 40, 'Clip wet socks/clothes to the pack to dry while walking. Trail MVP.'],
+  ['Comms (optional)', 'Starlink Mini', 1160, 'TOWN/BOUNCE LUXURY ONLY. ~20-40W draw needs a multi-kg power station — kills ultralight. NOT a safety device (no SOS). inReach/PLB stays the lifeline.', true],
+  ['Tech (optional)', 'iPad Pro', 700, 'BOUNCE in resupply boxes (St Arnaud / Arthur\'s Pass) — do NOT carry. Zero-day use only: drawing, photo edits, email. Fragile + power-hungry on trail.', true],
+].map(([category, name, weightG, notes, optional]) => ({
   category: category as string,
   name: name as string,
   weightG: weightG as number,
   notes: notes as string,
+  optional: optional as boolean | undefined,
   status: 'need' as GearStatus,
 }))
 
@@ -439,6 +451,63 @@ export async function upgradeSeedsToV3(settings: AppSettings) {
   })
 }
 
+const v4SleepingBag = {
+  name: 'Sleeping bag/quilt (comfort ~-5 to -7°C)',
+  weightG: 950,
+  notes: '#1 investment — warm-when-wet. Real TA hikers found 0°C ratings too cold and upgraded mid-trail. Snow possible even in January.',
+}
+
+const v4RecommendedGear: GearItem[] = [
+  { category: 'Clothing (worn)', name: 'Injinji toe socks (x3)', weightG: 150, notes: 'Blister prevention — near-universal TA pick. Pair with quick-dry trail runners.', optional: false, status: 'need' },
+  { category: 'Misc', name: 'Big clothespins (x4-6)', weightG: 40, notes: 'Clip wet socks/clothes to the pack to dry while walking. Trail MVP.', optional: false, status: 'need' },
+  { category: 'Sleep', name: 'Sleeping bag liner', weightG: 200, notes: 'Keeps the bag clean over 5 months + a few extra degrees.', optional: false, status: 'need' },
+  { category: 'Footwear', name: 'Camp shoes (Crocs)', weightG: 300, notes: 'Camp, river crossings, give the feet a break.', optional: false, status: 'need' },
+]
+
+const v4OptionalGear: GearItem[] = [
+  { category: 'Comms (optional)', name: 'Starlink Mini', weightG: 1160, notes: 'TOWN/BOUNCE LUXURY ONLY. ~20-40W draw needs a multi-kg power station — kills ultralight. NOT a safety device (no SOS). inReach/PLB stays the lifeline.', optional: true, status: 'need' },
+  { category: 'Tech (optional)', name: 'iPad Pro', weightG: 700, notes: "BOUNCE in resupply boxes (St Arnaud / Arthur's Pass) — do NOT carry. Zero-day use only: drawing, photo edits, email. Fragile + power-hungry on trail.", optional: true, status: 'need' },
+]
+
+const v4VisaNotes = "Travel on HK SAR passport — it's visa-waiver (NZeTA, up to 90 days). A 5-month TA exceeds the 90-day cap, so apply for a long-stay Visitor Visa in advance (standard visa-waiver path — simpler/cheaper than the mainland-China route). Use the SAME passport for NZeTA, visa, and every NZ entry. NZeTA: max 6 months in any 12-month window."
+
+const v4Tasks: Task[] = [
+  { workstream: 'Logistics', title: "Join that year's TA Facebook group + WhatsApp chain", done: false, notes: 'Coordinate rides to Cape Reinga / 90 Mile Beach start; real-time trail + river conditions; meet other SOBO hikers.' },
+  { workstream: 'Logistics', title: 'Pre-book overlapping/side-trip Great Walk huts (Tongariro, Kepler, Routeburn)', done: false, notes: 'Book the moment bookings open — they fill months ahead.' },
+  { workstream: 'Logistics', title: 'Buy onward/return flight evidence', done: false, notes: 'One-way can be questioned at check-in/border even with a visa. Have proof of onward travel + funds.' },
+  { workstream: 'Fitness', title: 'Practise loaded river crossings on Bibbulmun', done: false, notes: "Technique: face upstream, poles for a tripod, unbuckle hip belt, don't cross above waist or faster than walking pace." },
+]
+
+export async function upgradeSeedsToV4(settings: AppSettings) {
+  await db.transaction('rw', [db.gear, db.tasks, db.settings], async () => {
+    const gear = await db.gear.toArray()
+    const sleepingBag = gear.find((item) => item.category === 'Sleep' && item.name.includes('Sleeping bag'))
+    if (sleepingBag?.id) {
+      await db.gear.update(sleepingBag.id, v4SleepingBag)
+    }
+
+    const currentGear = await db.gear.toArray()
+    for (const item of [...v4RecommendedGear, ...v4OptionalGear]) {
+      const exists = currentGear.some((existing) => existing.name === item.name)
+      if (!exists) await db.gear.add(item)
+    }
+
+    const tasks = await db.tasks.toArray()
+    const visaTask = tasks.find((task) => task.title.includes('Visitor Visa'))
+    if (visaTask?.id) {
+      await db.tasks.update(visaTask.id, { notes: v4VisaNotes })
+    }
+
+    const latestTasks = await db.tasks.toArray()
+    for (const task of v4Tasks) {
+      const exists = latestTasks.some((existing) => existing.title === task.title)
+      if (!exists) await db.tasks.add(task)
+    }
+
+    await db.settings.put({ ...defaultSettings, ...settings, seedVersion: 4 })
+  })
+}
+
 export async function ensureSeeded() {
   const taskCount = await db.tasks.count()
   if (taskCount === 0) {
@@ -451,6 +520,10 @@ export async function ensureSeeded() {
     }
     if ((settings.seedVersion ?? 1) < 3 || (await db.elevation.count()) === 0) {
       await upgradeSeedsToV3(settings)
+      settings = { ...defaultSettings, ...((await db.settings.get('app')) ?? {}) }
+    }
+    if ((settings.seedVersion ?? 1) < 4) {
+      await upgradeSeedsToV4(settings)
     } else {
       await db.settings.put(settings)
     }
