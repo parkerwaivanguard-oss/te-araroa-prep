@@ -8,30 +8,59 @@ import {
   type FundContribution,
   type GearItem,
   type GearStatus,
+  type Difficulty,
   type ResupplyPoint,
+  type RouteKind,
+  type RoutePoint,
+  type RouteVariant,
+  type StoreType,
   type Task,
   type TrainingEntry,
   type Workstream,
   workstreams,
 } from './db'
 
-type Tab = 'Dashboard' | 'Tasks' | 'Gear' | 'Fund' | 'Resupply' | 'Training'
+type Tab = 'Dashboard' | 'Route' | 'Tasks' | 'Gear' | 'Fund' | 'Resupply' | 'Training'
+type RouteFilter = 'All' | 'North Is' | 'South Is' | 'Highlights' | 'Resupply' | 'Hazards' | 'Alternates'
+type RouteViewMode = 'List' | 'Map'
+type ResupplyFilter = 'All' | 'Mail-a-box' | 'Rest towns' | 'South Is'
+type GearFilter = 'All' | 'Need' | 'Owned' | 'Tested'
 
-const tabs: Tab[] = ['Dashboard', 'Tasks', 'Gear', 'Fund', 'Resupply', 'Training']
+const tabs: Tab[] = ['Dashboard', 'Route', 'Tasks', 'Gear', 'Fund', 'Resupply', 'Training']
 const workstreamOrder = workstreams.map((stream) => stream.name)
 const currency = new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 })
 const number = new Intl.NumberFormat('en-NZ')
 const todayIso = () => new Date().toISOString().slice(0, 10)
+const routeFilters: RouteFilter[] = ['All', 'North Is', 'South Is', 'Highlights', 'Resupply', 'Hazards', 'Alternates']
+const resupplyFilters: ResupplyFilter[] = ['All', 'Mail-a-box', 'Rest towns', 'South Is']
+const gearFilters: GearFilter[] = ['All', 'Need', 'Owned', 'Tested']
 const barColorClass = {
   teal: 'bg-teal',
   fern: 'bg-fern',
   coral: 'bg-coral',
   amber: 'bg-amber',
 }
+const kindStyle: Record<RouteKind, string> = {
+  milestone: 'border-ink bg-ink text-paper',
+  section: 'border-teal bg-teal text-paper',
+  highlight: 'border-ochre bg-ochre text-paper',
+  resupply: 'border-blue-700 bg-blue-700 text-white',
+  rest: 'border-fern bg-fern text-paper',
+  hazard: 'border-rust bg-rust text-paper',
+}
+const kindDot: Record<RouteKind, string> = {
+  milestone: '#2E2A25',
+  section: '#4E8F8A',
+  highlight: '#B5651D',
+  resupply: '#1D4ED8',
+  rest: '#5D8A55',
+  hazard: '#9B3D1E',
+}
 
 interface AppData {
   tasks: Task[]
   gear: GearItem[]
+  route: RoutePoint[]
   fund: FundContribution[]
   resupply: ResupplyPoint[]
   training: TrainingEntry[]
@@ -45,11 +74,14 @@ interface Stats {
   target: number
   requiredMonthly: number
   trainingKm: number
+  routeProgress: number
+  routeDone: number
 }
 
 const emptyData: AppData = {
   tasks: [],
   gear: [],
+  route: [],
   fund: [],
   resupply: [],
   training: [],
@@ -88,15 +120,16 @@ function App() {
   const [loading, setLoading] = useState(true)
 
   const loadData = async () => {
-    const [tasks, gear, fund, resupply, training, settings] = await Promise.all([
+    const [tasks, gear, route, fund, resupply, training, settings] = await Promise.all([
       db.tasks.orderBy('id').toArray(),
       db.gear.orderBy('id').toArray(),
+      db.route.orderBy('seq').toArray(),
       db.fund.orderBy('date').toArray(),
       db.resupply.orderBy('id').toArray(),
       db.training.orderBy('date').toArray(),
       db.settings.get('app'),
     ])
-    setData({ tasks, gear, fund, resupply, training, settings: settings ?? defaultSettings })
+    setData({ tasks, gear, route, fund, resupply, training, settings: settings ?? defaultSettings })
   }
 
   useEffect(() => {
@@ -111,6 +144,7 @@ function App() {
     const doneTasks = data.tasks.filter((task) => task.done).length
     const saved = data.fund.reduce((sum, item) => sum + item.amountNZD, 0)
     const trainingKm = data.training.reduce((sum, item) => sum + item.distanceKm, 0)
+    const routeDone = data.route.filter((point) => point.done).length
     const target = data.settings.fundTargetNZD
     const remaining = Math.max(target - saved, 0)
     return {
@@ -120,6 +154,8 @@ function App() {
       target,
       requiredMonthly: remaining / monthsBetweenNow(data.settings.departureDate),
       trainingKm,
+      routeProgress: data.route.length ? Math.round((routeDone / data.route.length) * 100) : 0,
+      routeDone,
     }
   }, [data])
 
@@ -160,6 +196,7 @@ function App() {
         </nav>
 
         {activeTab === 'Dashboard' && <Dashboard data={data} stats={stats} refresh={refresh} />}
+        {activeTab === 'Route' && <RouteView route={data.route} refresh={refresh} />}
         {activeTab === 'Tasks' && <TasksView tasks={data.tasks} refresh={refresh} />}
         {activeTab === 'Gear' && <GearView gear={data.gear} refresh={refresh} />}
         {activeTab === 'Fund' && <FundView data={data} stats={stats} refresh={refresh} />}
@@ -173,12 +210,25 @@ function App() {
 function Dashboard({ data, stats, refresh }: { data: AppData; stats: Stats; refresh: () => Promise<void> }) {
   return (
     <section className="grid gap-6">
-      <div className="grid gap-4 md:grid-cols-4">
+      <div className="grid gap-4 md:grid-cols-5">
         <Metric title="Days to depart" value={stats.days.toString()} detail="Cape Reinga target" large />
+        <Metric title="Route progress" value={`${stats.routeProgress}%`} detail={`${stats.routeDone} / ${data.route.length} waypoints reached`} />
         <Metric title="Prep progress" value={`${stats.taskProgress}%`} detail={`${data.tasks.filter((task) => task.done).length} of ${data.tasks.length} tasks`} />
         <Metric title="TA Fund" value={`${currency.format(stats.saved)} / ${currency.format(stats.target)}`} detail={`${currency.format(stats.requiredMonthly)} required per month`} />
         <Metric title="Training logged" value={`${stats.trainingKm.toFixed(1)} km`} detail="Cumulative distance" />
       </div>
+      <section className="panel">
+        <div className="flex items-center justify-between gap-4">
+          <div>
+            <p className="section-kicker">Route progress</p>
+            <h2 className="section-title">Cape Reinga to Bluff</h2>
+          </div>
+          <p className="text-sm text-ink/60">{stats.routeDone} / {data.route.length} waypoints reached</p>
+        </div>
+        <div className="mt-4 h-3 rounded-full border border-line bg-bone">
+          <div className="h-full rounded-full bg-teal" style={{ width: `${stats.routeProgress}%` }} />
+        </div>
+      </section>
       <Gantt />
       <SettingsPanel settings={data.settings} refresh={refresh} />
     </section>
@@ -322,6 +372,193 @@ function SettingsPanel({ settings, refresh }: { settings: AppSettings; refresh: 
   )
 }
 
+function RouteView({ route, refresh }: { route: RoutePoint[]; refresh: () => Promise<void> }) {
+  const [filter, setFilter] = useState<RouteFilter>('All')
+  const [mode, setMode] = useState<RouteViewMode>('List')
+  const [draft, setDraft] = useState<RoutePoint>({
+    seq: (route.at(-1)?.seq ?? 0) + 1,
+    name: '',
+    island: 'NI',
+    region: '',
+    kind: 'section',
+    km: route.at(-1)?.km ?? 0,
+    difficulty: 'moderate',
+    variant: 'main',
+    done: false,
+    notes: '',
+  })
+
+  const visibleRoute = route.filter((point) => {
+    if (filter === 'North Is') return point.island === 'NI'
+    if (filter === 'South Is') return point.island === 'SI'
+    if (filter === 'Highlights') return point.kind === 'highlight'
+    if (filter === 'Resupply') return point.kind === 'resupply'
+    if (filter === 'Hazards') return point.kind === 'hazard'
+    if (filter === 'Alternates') return point.variant === 'alternate' || point.variant === 'sidetrip'
+    return true
+  })
+
+  const addWaypoint = async () => {
+    if (!draft.name.trim() || !draft.region.trim()) return
+    await db.route.add({ ...draft, name: draft.name.trim(), region: draft.region.trim(), notes: draft.notes?.trim() })
+    setDraft({ ...draft, seq: draft.seq + 1, name: '', region: '', notes: '' })
+    await refresh()
+  }
+
+  return (
+    <section className="grid gap-5">
+      <section className="panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="section-kicker">Route</p>
+            <h2 className="section-title">South-bound waypoints</h2>
+            <p className="mt-2 text-sm text-ink/60">{visibleRoute.length} of {route.length} waypoints shown</p>
+          </div>
+          <div className="flex flex-wrap gap-2">
+            <Segmented options={routeFilters} value={filter} onChange={(value) => setFilter(value as RouteFilter)} />
+            <Segmented options={['List', 'Map']} value={mode} onChange={(value) => setMode(value as RouteViewMode)} />
+          </div>
+        </div>
+      </section>
+
+      {mode === 'Map' ? <RouteMap route={visibleRoute} /> : (
+        <section className="grid gap-3">
+          {visibleRoute.map((point) => <RouteCard point={point} key={point.id} refresh={refresh} />)}
+        </section>
+      )}
+
+      <FormPanel title="Add waypoint" kicker="Route">
+        <input className="input" type="number" placeholder="Seq" value={draft.seq} onChange={(event) => setDraft({ ...draft, seq: Number(event.target.value) })} />
+        <input className="input sm:col-span-2" placeholder="Name" value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} />
+        <select className="input" value={draft.island} onChange={(event) => setDraft({ ...draft, island: event.target.value as 'NI' | 'SI' })}>
+          <option value="NI">NI</option>
+          <option value="SI">SI</option>
+        </select>
+        <input className="input" placeholder="Region" value={draft.region} onChange={(event) => setDraft({ ...draft, region: event.target.value })} />
+        <input className="input" type="number" placeholder="Km" value={draft.km} onChange={(event) => setDraft({ ...draft, km: Number(event.target.value) })} />
+        <select className="input" value={draft.kind} onChange={(event) => setDraft({ ...draft, kind: event.target.value as RouteKind })}>
+          {(['milestone', 'section', 'highlight', 'resupply', 'rest', 'hazard'] satisfies RouteKind[]).map((kind) => <option key={kind} value={kind}>{kind}</option>)}
+        </select>
+        <select className="input" value={draft.difficulty} onChange={(event) => setDraft({ ...draft, difficulty: event.target.value as Difficulty })}>
+          {(['easy', 'moderate', 'hard', 'alpine'] satisfies Difficulty[]).map((difficulty) => <option key={difficulty} value={difficulty}>{difficulty}</option>)}
+        </select>
+        <select className="input" value={draft.variant} onChange={(event) => setDraft({ ...draft, variant: event.target.value as RouteVariant })}>
+          {(['main', 'alternate', 'sidetrip'] satisfies RouteVariant[]).map((variant) => <option key={variant} value={variant}>{variant}</option>)}
+        </select>
+        <input className="input sm:col-span-3" placeholder="Notes" value={draft.notes ?? ''} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} />
+        <button className="button-primary" type="button" onClick={addWaypoint}>Add</button>
+      </FormPanel>
+    </section>
+  )
+}
+
+function RouteCard({ point, refresh }: { point: RoutePoint; refresh: () => Promise<void> }) {
+  const update = async (changes: Partial<RoutePoint>) => {
+    if (!point.id) return
+    await db.route.update(point.id, changes)
+    await refresh()
+  }
+
+  return (
+    <article className={`panel ${point.variant !== 'main' ? 'border-dashed' : ''}`}>
+      <div className="grid gap-3 lg:grid-cols-[auto_1fr_auto] lg:items-start">
+        <label className="inline-flex items-center gap-2 text-sm font-semibold text-ink/70">
+          <input className="h-5 w-5 accent-sage" type="checkbox" checked={point.done} onChange={(event) => update({ done: event.target.checked })} />
+          {point.done ? 'Reached' : 'To go'}
+        </label>
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <h3 className={`font-serif text-2xl leading-tight ${point.done ? 'text-ink/45 line-through' : 'text-ink'}`}>{point.seq}. {point.name}</h3>
+            <Badge className={kindStyle[point.kind]}>{point.kind}</Badge>
+            <Badge className="border-line bg-bone text-ink">{point.difficulty}</Badge>
+            {point.variant !== 'main' && <Badge className="border-rust bg-transparent text-rust">{point.variant === 'alternate' ? 'ALT' : 'SIDE'}</Badge>}
+          </div>
+          <p className="mt-2 text-sm text-ink/60">{point.island} · {point.region} · km {number.format(point.km)}</p>
+          <p className="mt-3 text-sm leading-6 text-ink/75">{point.notes}</p>
+        </div>
+        <button className="button-quiet" type="button" onClick={async () => point.id && db.route.delete(point.id).then(refresh)}>Delete</button>
+      </div>
+      <div className="mt-4 grid gap-2 border-t border-line pt-4 lg:grid-cols-[0.35fr_1fr_0.35fr_0.65fr_0.5fr_0.5fr_0.7fr_1.4fr]">
+        <input className="input" type="number" value={point.seq} onChange={(event) => update({ seq: Number(event.target.value) })} />
+        <input className="input" value={point.name} onChange={(event) => update({ name: event.target.value })} />
+        <select className="input" value={point.island} onChange={(event) => update({ island: event.target.value as 'NI' | 'SI' })}>
+          <option value="NI">NI</option>
+          <option value="SI">SI</option>
+        </select>
+        <input className="input" value={point.region} onChange={(event) => update({ region: event.target.value })} />
+        <input className="input" type="number" value={point.km} onChange={(event) => update({ km: Number(event.target.value) })} />
+        <select className="input" value={point.kind} onChange={(event) => update({ kind: event.target.value as RouteKind })}>
+          {(['milestone', 'section', 'highlight', 'resupply', 'rest', 'hazard'] satisfies RouteKind[]).map((kind) => <option key={kind} value={kind}>{kind}</option>)}
+        </select>
+        <select className="input" value={point.difficulty} onChange={(event) => update({ difficulty: event.target.value as Difficulty })}>
+          {(['easy', 'moderate', 'hard', 'alpine'] satisfies Difficulty[]).map((difficulty) => <option key={difficulty} value={difficulty}>{difficulty}</option>)}
+        </select>
+        <select className="input" value={point.variant} onChange={(event) => update({ variant: event.target.value as RouteVariant })}>
+          {(['main', 'alternate', 'sidetrip'] satisfies RouteVariant[]).map((variant) => <option key={variant} value={variant}>{variant}</option>)}
+        </select>
+        <input className="input lg:col-span-8" value={point.notes ?? ''} onChange={(event) => update({ notes: event.target.value })} />
+      </div>
+    </article>
+  )
+}
+
+function RouteMap({ route }: { route: RoutePoint[] }) {
+  const maxKm = Math.max(...route.map((point) => point.km), 3008)
+
+  return (
+    <section className="panel overflow-hidden">
+      <div className="flex items-end justify-between gap-4">
+        <div>
+          <p className="section-kicker">Map</p>
+          <h2 className="section-title">Schematic trail line</h2>
+        </div>
+        <div className="flex flex-wrap gap-2 text-xs">
+          {(['milestone', 'section', 'highlight', 'resupply', 'rest', 'hazard'] satisfies RouteKind[]).map((kind) => (
+            <span className="inline-flex items-center gap-2 rounded-sm border border-line px-2 py-1" key={kind}>
+              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: kindDot[kind] }} />
+              {kind}
+            </span>
+          ))}
+        </div>
+      </div>
+      <div className="mt-5 overflow-x-auto">
+        <svg className="min-h-[620px] min-w-[520px] rounded-md border border-line bg-bone" viewBox="0 0 520 620" role="img" aria-label="Schematic map of route waypoints across New Zealand">
+          <path d="M214 32 C173 68 151 126 167 183 C181 232 158 270 134 312 C171 317 205 302 218 265 C237 213 267 177 251 123 C242 92 247 59 214 32Z" fill="#E5DCCD" stroke="#C9B9A5" strokeWidth="2" />
+          <path d="M318 293 C267 336 237 392 252 452 C262 495 226 543 190 589 C259 574 324 527 353 461 C382 394 373 337 318 293Z" fill="#E5DCCD" stroke="#C9B9A5" strokeWidth="2" />
+          <path d="M222 42 C208 122 201 193 188 280 C245 344 296 430 209 585" fill="none" stroke="#8F7D68" strokeDasharray="5 7" strokeWidth="2" />
+          {route.map((point) => {
+            const y = 42 + (point.km / maxKm) * 540
+            const baseX = point.island === 'NI' ? 205 : 292
+            const wobble = ((point.seq % 5) - 2) * 8
+            return (
+              <g key={point.id ?? point.seq}>
+                <circle cx={baseX + wobble} cy={y} r={point.variant === 'main' ? 5 : 7} fill={kindDot[point.kind]} stroke={point.variant === 'main' ? '#F4EFE6' : '#9B3D1E'} strokeDasharray={point.variant === 'main' ? undefined : '3 3'} strokeWidth="2" />
+                {(point.kind === 'milestone' || point.kind === 'hazard') && <text x={baseX + wobble + 10} y={y + 4} className="fill-ink text-[10px]">{point.name}</text>}
+              </g>
+            )
+          })}
+        </svg>
+      </div>
+    </section>
+  )
+}
+
+function Badge({ children, className }: { children: React.ReactNode; className: string }) {
+  return <span className={`rounded-sm border px-2 py-1 text-[11px] font-semibold uppercase tracking-[0.12em] ${className}`}>{children}</span>
+}
+
+function Segmented({ options, value, onChange }: { options: string[]; value: string; onChange: (value: string) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1 rounded-md border border-line bg-bone p-1">
+      {options.map((option) => (
+        <button className={`rounded px-3 py-1.5 text-sm font-semibold transition ${value === option ? 'bg-rust text-paper' : 'text-ink/65 hover:text-rust'}`} key={option} type="button" onClick={() => onChange(option)}>
+          {option}
+        </button>
+      ))}
+    </div>
+  )
+}
+
 function TasksView({ tasks, refresh }: { tasks: Task[]; refresh: () => Promise<void> }) {
   const [open, setOpen] = useState<Record<string, boolean>>(() => Object.fromEntries(workstreamOrder.map((stream) => [stream, true])))
   const [draft, setDraft] = useState<Partial<Task>>({ workstream: 'Fitness', title: '' })
@@ -382,8 +619,11 @@ function TaskRow({ task, refresh }: { task: Task; refresh: () => Promise<void> }
 
 function GearView({ gear, refresh }: { gear: GearItem[]; refresh: () => Promise<void> }) {
   const [draft, setDraft] = useState<GearItem>({ category: '', name: '', status: 'need' })
-  const grouped = groupBy(gear, (item) => item.category)
-  const categoryWeights = Object.fromEntries(Object.entries(grouped).map(([category, items]) => [category, packWeight(items)]))
+  const [filter, setFilter] = useState<GearFilter>('All')
+  const visibleGear = gear.filter((item) => filter === 'All' || item.status === filter.toLowerCase())
+  const grouped = groupBy(visibleGear, (item) => item.category)
+  const allGrouped = groupBy(gear, (item) => item.category)
+  const categoryWeights = Object.fromEntries(Object.entries(allGrouped).map(([category, items]) => [category, packWeight(items)]))
   const overall = packWeight(gear)
 
   const add = async () => {
@@ -407,6 +647,13 @@ function GearView({ gear, refresh }: { gear: GearItem[]; refresh: () => Promise<
         <input className="input sm:col-span-2" placeholder="Notes" value={draft.notes ?? ''} onChange={(event) => setDraft({ ...draft, notes: event.target.value })} />
         <button className="button-primary" type="button" onClick={add}>Add</button>
       </FormPanel>
+      <section className="panel flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div>
+          <p className="section-kicker">Filter</p>
+          <p className="mt-1 text-sm text-ink/60">{visibleGear.length} of {gear.length} gear items shown</p>
+        </div>
+        <Segmented options={gearFilters} value={filter} onChange={(value) => setFilter(value as GearFilter)} />
+      </section>
       {Object.entries(grouped).map(([category, items]) => (
         <section className="panel" key={category}>
           <div className="flex items-baseline justify-between gap-4">
@@ -491,13 +738,31 @@ function FundView({ data, stats, refresh }: { data: AppData; stats: Stats; refre
 }
 
 function ResupplyView({ points, refresh }: { points: ResupplyPoint[]; refresh: () => Promise<void> }) {
+  const [filter, setFilter] = useState<ResupplyFilter>('All')
+  const visiblePoints = points.filter((point) => {
+    if (filter === 'Mail-a-box') return point.mailBox
+    if (filter === 'Rest towns') return point.restTown
+    if (filter === 'South Is') return point.island === 'SI'
+    return true
+  })
+
   return (
-    <section className="panel">
-      <p className="section-kicker">Resupply</p>
-      <h2 className="section-title">South Island focus points</h2>
-      <div className="mt-5 grid gap-3">
-        {points.map((point) => <ResupplyRow point={point} key={point.id} refresh={refresh} />)}
-      </div>
+    <section className="grid gap-5">
+      <section className="panel">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+          <div>
+            <p className="section-kicker">Resupply</p>
+            <h2 className="section-title">Town, box, and carry plan</h2>
+            <p className="mt-2 text-sm text-ink/60">{visiblePoints.length} of {points.length} resupply points shown</p>
+          </div>
+          <Segmented options={resupplyFilters} value={filter} onChange={(value) => setFilter(value as ResupplyFilter)} />
+        </div>
+      </section>
+      <section className="panel">
+        <div className="grid gap-3">
+          {visiblePoints.map((point) => <ResupplyRow point={point} key={point.id} refresh={refresh} />)}
+        </div>
+      </section>
     </section>
   )
 }
@@ -510,14 +775,24 @@ function ResupplyRow({ point, refresh }: { point: ResupplyPoint; refresh: () => 
   }
 
   return (
-    <article className="grid gap-2 rounded-md border border-line bg-bone/40 p-3 lg:grid-cols-[0.8fr_0.3fr_0.5fr_0.5fr_1.5fr] lg:items-center">
-      <strong>{point.name}</strong>
+    <article className="grid gap-2 rounded-md border border-line bg-bone/40 p-3 lg:grid-cols-[0.9fr_0.25fr_0.45fr_0.55fr_0.5fr_0.55fr_1.5fr] lg:items-center">
+      <div>
+        <strong>{point.name}</strong>
+        <p className="text-xs text-ink/50">km {number.format(point.kmMark)}</p>
+      </div>
       <span className="rounded-sm border border-line px-2 py-1 text-center text-sm">{point.island}</span>
+      <select className="input" value={point.storeType} onChange={(event) => update({ storeType: event.target.value as StoreType })}>
+        {(['supermarket', 'foursquare', 'alpine-store', 'mail-box'] satisfies StoreType[]).map((store) => <option key={store} value={store}>{store}</option>)}
+      </select>
       <label className="inline-flex items-center gap-2 text-sm">
         <input className="accent-sage" type="checkbox" checked={point.mailBox} onChange={(event) => update({ mailBox: event.target.checked })} />
         Mail box
       </label>
-      <input className="input" type="number" placeholder="Days food" value={point.daysFood ?? ''} onChange={(event) => update({ daysFood: event.target.value ? Number(event.target.value) : undefined })} />
+      <label className="inline-flex items-center gap-2 text-sm">
+        <input className="accent-sage" type="checkbox" checked={point.restTown} onChange={(event) => update({ restTown: event.target.checked })} />
+        Rest
+      </label>
+      <input className="input" placeholder="Carry days" value={point.carryDays} onChange={(event) => update({ carryDays: event.target.value })} />
       <input className="input" value={point.notes ?? ''} onChange={(event) => update({ notes: event.target.value })} />
     </article>
   )
