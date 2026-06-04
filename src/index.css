@@ -1,0 +1,60 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color: #2E2A25;
+  background: #F4EFE6;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+}
+
+button,
+input,
+select {
+  font: inherit;
+}
+
+@layer components {
+  .panel {
+    @apply rounded-md border border-line bg-paper p-5 shadow-hush;
+  }
+
+  .tab-button {
+    @apply whitespace-nowrap rounded-md border border-line bg-paper px-4 py-2 text-sm font-semibold text-ink/70 transition hover:border-rust hover:text-rust;
+  }
+
+  .tab-button-active {
+    @apply border-rust bg-rust text-paper hover:text-paper;
+  }
+
+  .section-kicker {
+    @apply text-xs font-semibold uppercase tracking-[0.18em] text-rust;
+  }
+
+  .section-title {
+    @apply mt-1 font-serif text-2xl leading-tight text-ink md:text-3xl;
+  }
+
+  .input {
+    @apply min-h-10 w-full rounded-md border border-line bg-bone px-3 py-2 text-sm text-ink outline-none transition placeholder:text-ink/35 focus:border-rust focus:ring-2 focus:ring-rust/15;
+  }
+
+  .button-primary {
+    @apply min-h-10 rounded-md border border-rust bg-rust px-4 py-2 text-sm font-semibold text-paper transition hover:bg-ochre;
+  }
+
+  .button-quiet {
+    @apply min-h-10 rounded-md border border-line bg-transparent px-3 py-2 text-sm font-semibold text-ink/60 transition hover:border-rust hover:text-rust;
+  }
+}
