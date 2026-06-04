@@ -57,6 +57,17 @@ export interface RoutePoint {
   variant: RouteVariant
   done: boolean
   notes?: string
+  provider?: string
+  phone?: string
+  cost?: string
+  transportNotes?: string
+}
+
+export interface ElevationPoint {
+  id?: number
+  km: number
+  elevationM: number
+  label?: string
 }
 
 export interface TrainingEntry {
@@ -92,6 +103,7 @@ export class TaPrepDatabase extends Dexie {
   training!: Table<TrainingEntry, number>
   settings!: Table<AppSettings, string>
   route!: Table<RoutePoint, number>
+  elevation!: Table<ElevationPoint, number>
 
   constructor() {
     super('ta-prep')
@@ -112,6 +124,16 @@ export class TaPrepDatabase extends Dexie {
       settings: 'id',
       route: '++id, seq, island, kind, variant, done',
     })
+    this.version(3).stores({
+      tasks: '++id, workstream, done, dueDate',
+      gear: '++id, category, status',
+      fund: '++id, date',
+      resupply: '++id, island, mailBox, restTown, storeType, kmMark',
+      training: '++id, date',
+      settings: 'id',
+      route: '++id, seq, island, kind, variant, done',
+      elevation: '++id, km',
+    })
   }
 }
 
@@ -122,7 +144,7 @@ export const defaultSettings: AppSettings = {
   fundTargetNZD: 12000,
   departureDate: '2027-11-01',
   finishDate: '2028-04-01',
-  seedVersion: 2,
+  seedVersion: 3,
 }
 
 export const workstreams: WorkstreamWindow[] = [
@@ -148,6 +170,8 @@ export const seedTasks: Task[] = [
   ['Logistics', 'Buy Trail Pass (DOC huts + campsites discount)'],
   ['Logistics', 'Book flights Perth to Auckland + Cape Reinga transfer'],
   ['Logistics', 'Plan resupply boxes for remote South Island sections'],
+  ['Logistics', 'Apply for NZ Visitor Visa — long stay (thru-hike exceeds 3-month NZeTA limit) [HIGH PRIORITY]', 'Chinese passport + AU PR. NZeTA only allows 3 months; TA takes 4-6. Apply for a longer Visitor Visa in advance. Carry printed AU PR/RRV proof. Budget IVL + visa fee.'],
+  ['Logistics', 'Sort satellite beacon (Garmin inReach / ZOLEO) + set scheduled check-in messages', '2-way + SOS. Test before departure; share tracking link with mother Li Ying.'],
   ['Finance', 'Open dedicated "TA Fund" account'],
   ['Finance', 'Reach NZD 12,000 target by departure'],
   ['Finance', 'Keep daily spend cap; route savings into TA Fund'],
@@ -163,7 +187,7 @@ export const seedTasks: Task[] = [
   ['On Trail', 'Depart Cape Reinga ~1 Nov 2027 (southbound)'],
   ['On Trail', 'Reach Bluff before April 2028'],
   ['On Trail', '~4-6 months, 3,000 km'],
-].map(([workstream, title]) => ({ workstream: workstream as Workstream, title, done: false }))
+].map(([workstream, title, notes]) => ({ workstream: workstream as Workstream, title, notes: notes as string | undefined, done: false }))
 
 export const seedRoute: RoutePoint[] = [
   [1, 'Cape Reinga', 'NI', 'Northland', 'milestone', 0, 'easy', 'main', 'Southbound start. Lighthouse, two oceans meet, Māori sacred site.'],
@@ -218,6 +242,62 @@ export const seedRoute: RoutePoint[] = [
   variant: variant as RouteVariant,
   done: false,
   notes: notes as string,
+}))
+
+export const hazardTransport: Record<string, Pick<RoutePoint, 'provider' | 'phone' | 'cost' | 'transportNotes'>> = {
+  'Rakaia River': {
+    provider: 'Methven Travel (shuttle) / Double Hill Run Rd school bus',
+    phone: '0800 684 888',
+    cost: 'School bus ~$42pp (school days only); private shuttle more',
+    transportNotes: 'Do NOT ford. Vehicle bypass via Methven. Confirm timetable closer to date.',
+  },
+  'Rangitata River': {
+    provider: 'Methven-based shuttle / hitch',
+    phone: '0800 684 888',
+    cost: 'Varies',
+    transportNotes: 'Do NOT ford. Vehicle bypass (Hakatere/Hwy detour). Arrange transport ahead.',
+  },
+  'Ahuriri River': {
+    provider: 'Self/hitch detour',
+    phone: '',
+    cost: '—',
+    transportNotes: 'Detour if high flow. Check ECAN Southern Region river-flow data before crossing.',
+  },
+}
+
+export const seedRouteWithTransport: RoutePoint[] = seedRoute.map((point) => ({
+  ...point,
+  ...(hazardTransport[point.name] ?? {}),
+}))
+
+export const seedElevation: ElevationPoint[] = [
+  [0, 0, 'Cape Reinga'],
+  [100, 0, ''],
+  [600, 40, 'Auckland'],
+  [1080, 550, ''],
+  [1150, 1886, 'Tongariro 1886m'],
+  [1250, 40, 'Whanganui R'],
+  [1600, 1460, 'Tararua ~1460m'],
+  [1700, 0, 'Wellington'],
+  [1750, 400, 'QCT'],
+  [1900, 1700, 'Richmond ~1700m'],
+  [2030, 620, 'St Arnaud'],
+  [2100, 1870, 'Waiau Pass 1870m'],
+  [2230, 960, 'Harper Pass 960m'],
+  [2300, 740, "Arthur's Pass"],
+  [2360, 300, 'Rakaia (hazard)'],
+  [2500, 1925, 'Stag Saddle 1925m (highest)'],
+  [2560, 700, 'Tekapo'],
+  [2620, 470, 'Twizel'],
+  [2750, 1578, 'Breast Hill ~1578m'],
+  [2820, 300, 'Wānaka'],
+  [2900, 1100, 'Motatapu'],
+  [2980, 300, 'Queenstown'],
+  [3008, 10, 'Bluff'],
+].map(([km, elevationM, label]) => ({
+  km: km as number,
+  elevationM: elevationM as number,
+  label: label as string,
 }))
 
 export const seedResupply: ResupplyPoint[] = [
@@ -302,7 +382,7 @@ export const seedGear: GearItem[] = [
 }))
 
 export async function resetToSeed() {
-  await db.transaction('rw', [db.tasks, db.gear, db.fund, db.resupply, db.training, db.settings, db.route], async () => {
+  await db.transaction('rw', [db.tasks, db.gear, db.fund, db.resupply, db.training, db.settings, db.route, db.elevation], async () => {
     await Promise.all([
       db.tasks.clear(),
       db.gear.clear(),
@@ -311,12 +391,14 @@ export async function resetToSeed() {
       db.training.clear(),
       db.settings.clear(),
       db.route.clear(),
+      db.elevation.clear(),
     ])
     await db.settings.put(defaultSettings)
     await db.tasks.bulkAdd(seedTasks)
     await db.gear.bulkAdd(seedGear)
     await db.resupply.bulkAdd(seedResupply)
-    await db.route.bulkAdd(seedRoute)
+    await db.route.bulkAdd(seedRouteWithTransport)
+    await db.elevation.bulkAdd(seedElevation)
   })
 }
 
@@ -325,8 +407,35 @@ export async function upgradeSeedsToV2(settings: AppSettings) {
     await Promise.all([db.gear.clear(), db.resupply.clear(), db.route.clear()])
     await db.gear.bulkAdd(seedGear)
     await db.resupply.bulkAdd(seedResupply)
-    await db.route.bulkAdd(seedRoute)
+    await db.route.bulkAdd(seedRouteWithTransport)
     await db.settings.put({ ...defaultSettings, ...settings, seedVersion: 2 })
+  })
+}
+
+export async function upgradeSeedsToV3(settings: AppSettings) {
+  await db.transaction('rw', [db.route, db.elevation, db.tasks, db.settings], async () => {
+    for (const [name, transport] of Object.entries(hazardTransport)) {
+      const existing = (await db.route.toArray()).find((point) => point.name === name)
+      if (existing?.id) {
+        await db.route.update(existing.id, transport)
+      } else {
+        const seed = seedRouteWithTransport.find((point) => point.name === name)
+        if (seed) await db.route.add(seed)
+      }
+    }
+
+    if ((await db.elevation.count()) === 0) {
+      await db.elevation.bulkAdd(seedElevation)
+    }
+
+    const migrationTasks = seedTasks.filter((task) => task.title.startsWith('Apply for NZ Visitor Visa') || task.title.startsWith('Sort satellite beacon'))
+    const existingTasks = await db.tasks.toArray()
+    for (const task of migrationTasks) {
+      const exists = existingTasks.some((existingTask) => existingTask.title === task.title)
+      if (!exists) await db.tasks.add(task)
+    }
+
+    await db.settings.put({ ...defaultSettings, ...settings, seedVersion: 3 })
   })
 }
 
@@ -335,9 +444,13 @@ export async function ensureSeeded() {
   if (taskCount === 0) {
     await resetToSeed()
   } else {
-    const settings = { ...defaultSettings, ...((await db.settings.get('app')) ?? {}) }
+    let settings = { ...defaultSettings, ...((await db.settings.get('app')) ?? {}) }
     if ((settings.seedVersion ?? 1) < 2 || (await db.route.count()) === 0) {
       await upgradeSeedsToV2(settings)
+      settings = { ...defaultSettings, ...((await db.settings.get('app')) ?? {}) }
+    }
+    if ((settings.seedVersion ?? 1) < 3 || (await db.elevation.count()) === 0) {
+      await upgradeSeedsToV3(settings)
     } else {
       await db.settings.put(settings)
     }

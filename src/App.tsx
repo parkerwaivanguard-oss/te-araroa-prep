@@ -5,6 +5,7 @@ import {
   ensureSeeded,
   resetToSeed,
   type AppSettings,
+  type ElevationPoint,
   type FundContribution,
   type GearItem,
   type GearStatus,
@@ -22,7 +23,7 @@ import {
 
 type Tab = 'Dashboard' | 'Route' | 'Tasks' | 'Gear' | 'Fund' | 'Resupply' | 'Training'
 type RouteFilter = 'All' | 'North Is' | 'South Is' | 'Highlights' | 'Resupply' | 'Hazards' | 'Alternates'
-type RouteViewMode = 'List' | 'Map'
+type RouteViewMode = 'List' | 'Map' | 'Elevation'
 type ResupplyFilter = 'All' | 'Mail-a-box' | 'Rest towns' | 'South Is'
 type GearFilter = 'All' | 'Need' | 'Owned' | 'Tested'
 
@@ -61,6 +62,7 @@ interface AppData {
   tasks: Task[]
   gear: GearItem[]
   route: RoutePoint[]
+  elevation: ElevationPoint[]
   fund: FundContribution[]
   resupply: ResupplyPoint[]
   training: TrainingEntry[]
@@ -82,6 +84,7 @@ const emptyData: AppData = {
   tasks: [],
   gear: [],
   route: [],
+  elevation: [],
   fund: [],
   resupply: [],
   training: [],
@@ -118,22 +121,33 @@ function App() {
   const [activeTab, setActiveTab] = useState<Tab>('Dashboard')
   const [data, setData] = useState<AppData>(emptyData)
   const [loading, setLoading] = useState(true)
+  const [offlineReady, setOfflineReady] = useState(false)
 
   const loadData = async () => {
-    const [tasks, gear, route, fund, resupply, training, settings] = await Promise.all([
+    const [tasks, gear, route, elevation, fund, resupply, training, settings] = await Promise.all([
       db.tasks.orderBy('id').toArray(),
       db.gear.orderBy('id').toArray(),
       db.route.orderBy('seq').toArray(),
+      db.elevation.orderBy('km').toArray(),
       db.fund.orderBy('date').toArray(),
       db.resupply.orderBy('id').toArray(),
       db.training.orderBy('date').toArray(),
       db.settings.get('app'),
     ])
-    setData({ tasks, gear, route, fund, resupply, training, settings: settings ?? defaultSettings })
+    setData({ tasks, gear, route, elevation, fund, resupply, training, settings: settings ?? defaultSettings })
   }
 
   useEffect(() => {
     ensureSeeded().then(loadData).finally(() => setLoading(false))
+  }, [])
+
+  useEffect(() => {
+    const showOfflineReady = () => {
+      setOfflineReady(true)
+      window.setTimeout(() => setOfflineReady(false), 4200)
+    }
+    window.addEventListener('ta-offline-ready', showOfflineReady)
+    return () => window.removeEventListener('ta-offline-ready', showOfflineReady)
   }, [])
 
   const refresh = async () => {
@@ -196,13 +210,18 @@ function App() {
         </nav>
 
         {activeTab === 'Dashboard' && <Dashboard data={data} stats={stats} refresh={refresh} />}
-        {activeTab === 'Route' && <RouteView route={data.route} refresh={refresh} />}
+        {activeTab === 'Route' && <RouteView route={data.route} elevation={data.elevation} refresh={refresh} />}
         {activeTab === 'Tasks' && <TasksView tasks={data.tasks} refresh={refresh} />}
         {activeTab === 'Gear' && <GearView gear={data.gear} refresh={refresh} />}
         {activeTab === 'Fund' && <FundView data={data} stats={stats} refresh={refresh} />}
         {activeTab === 'Resupply' && <ResupplyView points={data.resupply} refresh={refresh} />}
         {activeTab === 'Training' && <TrainingView entries={data.training} refresh={refresh} />}
       </div>
+      {offlineReady && (
+        <div className="fixed bottom-4 right-4 z-50 rounded-md border border-rust bg-paper px-4 py-3 text-sm font-semibold text-rust shadow-hush">
+          Offline-ready
+        </div>
+      )}
     </main>
   )
 }
@@ -372,7 +391,7 @@ function SettingsPanel({ settings, refresh }: { settings: AppSettings; refresh: 
   )
 }
 
-function RouteView({ route, refresh }: { route: RoutePoint[]; refresh: () => Promise<void> }) {
+function RouteView({ route, elevation, refresh }: { route: RoutePoint[]; elevation: ElevationPoint[]; refresh: () => Promise<void> }) {
   const [filter, setFilter] = useState<RouteFilter>('All')
   const [mode, setMode] = useState<RouteViewMode>('List')
   const [draft, setDraft] = useState<RoutePoint>({
@@ -416,12 +435,12 @@ function RouteView({ route, refresh }: { route: RoutePoint[]; refresh: () => Pro
           </div>
           <div className="flex flex-wrap gap-2">
             <Segmented options={routeFilters} value={filter} onChange={(value) => setFilter(value as RouteFilter)} />
-            <Segmented options={['List', 'Map']} value={mode} onChange={(value) => setMode(value as RouteViewMode)} />
+            <Segmented options={['List', 'Map', 'Elevation']} value={mode} onChange={(value) => setMode(value as RouteViewMode)} />
           </div>
         </div>
       </section>
 
-      {mode === 'Map' ? <RouteMap route={visibleRoute} /> : (
+      {mode === 'Map' ? <RouteMap route={visibleRoute} /> : mode === 'Elevation' ? <ElevationProfile elevation={elevation} route={route} /> : (
         <section className="grid gap-3">
           {visibleRoute.map((point) => <RouteCard point={point} key={point.id} refresh={refresh} />)}
         </section>
@@ -475,6 +494,7 @@ function RouteCard({ point, refresh }: { point: RoutePoint; refresh: () => Promi
           </div>
           <p className="mt-2 text-sm text-ink/60">{point.island} · {point.region} · km {number.format(point.km)}</p>
           <p className="mt-3 text-sm leading-6 text-ink/75">{point.notes}</p>
+          {point.kind === 'hazard' && <HazardTransport point={point} />}
         </div>
         <button className="button-quiet" type="button" onClick={async () => point.id && db.route.delete(point.id).then(refresh)}>Delete</button>
       </div>
@@ -499,6 +519,31 @@ function RouteCard({ point, refresh }: { point: RoutePoint; refresh: () => Promi
         <input className="input lg:col-span-8" value={point.notes ?? ''} onChange={(event) => update({ notes: event.target.value })} />
       </div>
     </article>
+  )
+}
+
+function HazardTransport({ point }: { point: RoutePoint }) {
+  const phoneHref = point.phone ? `tel:${point.phone.replace(/\s+/g, '')}` : undefined
+
+  return (
+    <div className="mt-4 rounded-md border border-rust bg-rust/5 p-4">
+      <p className="text-xs font-semibold uppercase tracking-[0.16em] text-rust">Hazard transport</p>
+      <div className="mt-3 grid gap-3 text-sm md:grid-cols-3">
+        <div>
+          <span className="block text-ink/45">Provider</span>
+          <strong>{point.provider || 'TBC'}</strong>
+        </div>
+        <div>
+          <span className="block text-ink/45">Phone</span>
+          {phoneHref ? <a className="font-semibold text-rust underline decoration-rust/40 underline-offset-4" href={phoneHref}>{point.phone}</a> : <strong>—</strong>}
+        </div>
+        <div>
+          <span className="block text-ink/45">Cost</span>
+          <strong>{point.cost || 'TBC'}</strong>
+        </div>
+      </div>
+      <p className="mt-3 text-sm leading-6 text-ink/75">{point.transportNotes || 'Confirm bypass details closer to date.'}</p>
+    </div>
   )
 }
 
@@ -539,6 +584,76 @@ function RouteMap({ route }: { route: RoutePoint[] }) {
           })}
         </svg>
       </div>
+    </section>
+  )
+}
+
+function ElevationProfile({ elevation, route }: { elevation: ElevationPoint[]; route: RoutePoint[] }) {
+  const width = 760
+  const height = 320
+  const padding = { top: 24, right: 32, bottom: 42, left: 54 }
+  const plotWidth = width - padding.left - padding.right
+  const plotHeight = height - padding.top - padding.bottom
+  const maxKm = 3008
+  const maxElevation = 2000
+  const x = (km: number) => padding.left + (km / maxKm) * plotWidth
+  const y = (elevationM: number) => padding.top + plotHeight - (Math.min(elevationM, maxElevation) / maxElevation) * plotHeight
+  const linePoints = elevation.map((point) => `${x(point.km)},${y(point.elevationM)}`).join(' ')
+  const areaPoints = `${padding.left},${padding.top + plotHeight} ${linePoints} ${padding.left + plotWidth},${padding.top + plotHeight}`
+  const hazards = route.filter((point) => point.kind === 'hazard')
+  const resupplies = route.filter((point) => point.kind === 'resupply')
+
+  return (
+    <section className="panel overflow-hidden">
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+        <div>
+          <p className="section-kicker">Elevation</p>
+          <h2 className="section-title">Approximate trail profile</h2>
+        </div>
+        <div className="flex flex-wrap gap-3 text-xs text-ink/60">
+          <span className="inline-flex items-center gap-2"><span className="h-3 w-3 rounded-full bg-rust" /> profile</span>
+          <span className="inline-flex items-center gap-2"><span className="h-3 w-3 border-l border-dashed border-rust" /> hazard</span>
+          <span className="inline-flex items-center gap-2"><span className="h-3 w-3 bg-blue-700" /> resupply</span>
+        </div>
+      </div>
+      <div className="mt-5 overflow-x-auto">
+        <svg className="min-w-[640px] rounded-md border border-line bg-bone" viewBox={`0 0 ${width} ${height}`} role="img" aria-label="Approximate Te Araroa elevation profile">
+          {[1000, 2000].map((grid) => (
+            <g key={grid}>
+              <line x1={padding.left} x2={width - padding.right} y1={y(grid)} y2={y(grid)} stroke="#D8CDBD" strokeDasharray="5 6" />
+              <text x={12} y={y(grid) + 4} className="fill-ink/60 text-[11px]">{grid}m</text>
+            </g>
+          ))}
+          <line x1={padding.left} x2={width - padding.right} y1={padding.top + plotHeight} y2={padding.top + plotHeight} stroke="#8F7D68" />
+          <line x1={padding.left} x2={padding.left} y1={padding.top} y2={padding.top + plotHeight} stroke="#8F7D68" />
+          <polygon points={areaPoints} fill="#B5651D" opacity="0.18" />
+          <polyline points={linePoints} fill="none" stroke="#9B3D1E" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" />
+          {hazards.map((point) => (
+            <g key={`hazard-${point.name}`}>
+              <line x1={x(point.km)} x2={x(point.km)} y1={padding.top} y2={padding.top + plotHeight} stroke="#9B3D1E" strokeDasharray="5 6" strokeWidth="1.5" />
+              <text x={x(point.km) + 4} y={padding.top + 14} className="fill-rust text-[10px]">{point.name}</text>
+            </g>
+          ))}
+          {resupplies.map((point) => (
+            <line key={`resupply-${point.name}`} x1={x(point.km)} x2={x(point.km)} y1={padding.top + plotHeight} y2={padding.top + plotHeight + 12} stroke="#1D4ED8" strokeWidth="2" />
+          ))}
+          {elevation.map((point, index) => (
+            <g key={`${point.km}-${point.label}`}>
+              <circle cx={x(point.km)} cy={y(point.elevationM)} r={point.label ? 4 : 2.5} fill={point.label ? '#9B3D1E' : '#B5651D'} />
+              {point.label && (
+                <text x={x(point.km) + (index % 2 === 0 ? 8 : -8)} y={y(point.elevationM) - (index % 3 === 0 ? 10 : 16)} textAnchor={index % 2 === 0 ? 'start' : 'end'} className="fill-ink text-[10px]">
+                  <title>{point.label}</title>
+                  {point.label}
+                </text>
+              )}
+            </g>
+          ))}
+          {[0, 1000, 2000, 3008].map((km) => (
+            <text key={km} x={x(km)} y={height - 16} textAnchor={km === 0 ? 'start' : km === 3008 ? 'end' : 'middle'} className="fill-ink/60 text-[11px]">{km} km</text>
+          ))}
+        </svg>
+      </div>
+      <p className="mt-3 text-sm text-ink/60">Approximate profile — heights/km are indicative, not survey data.</p>
     </section>
   )
 }
