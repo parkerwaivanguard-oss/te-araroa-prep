@@ -80,12 +80,21 @@ export interface TrainingEntry {
   notes?: string
 }
 
+export interface PhotoItem {
+  id?: number
+  title: string
+  src: string
+  caption?: string
+  date?: string
+}
+
 export interface AppSettings {
   id: 'app'
   fundTargetNZD: number
   departureDate: string
   finishDate: string
   seedVersion: number
+  googlePhotosAlbumUrl?: string
 }
 
 export interface WorkstreamWindow {
@@ -105,6 +114,7 @@ export class TaPrepDatabase extends Dexie {
   settings!: Table<AppSettings, string>
   route!: Table<RoutePoint, number>
   elevation!: Table<ElevationPoint, number>
+  photos!: Table<PhotoItem, number>
 
   constructor() {
     super('ta-prep')
@@ -135,6 +145,17 @@ export class TaPrepDatabase extends Dexie {
       route: '++id, seq, island, kind, variant, done',
       elevation: '++id, km',
     })
+    this.version(4).stores({
+      tasks: '++id, workstream, done, dueDate',
+      gear: '++id, category, status',
+      fund: '++id, date',
+      resupply: '++id, island, mailBox, restTown, storeType, kmMark',
+      training: '++id, date',
+      settings: 'id',
+      route: '++id, seq, island, kind, variant, done',
+      elevation: '++id, km',
+      photos: '++id, date',
+    })
   }
 }
 
@@ -146,6 +167,7 @@ export const defaultSettings: AppSettings = {
   departureDate: '2027-11-01',
   finishDate: '2028-04-01',
   seedVersion: 4,
+  googlePhotosAlbumUrl: 'https://photos.app.goo.gl/ioqNro4Xxdp1qjhq8',
 }
 
 export const workstreams: WorkstreamWindow[] = [
@@ -394,7 +416,7 @@ export const seedGear: GearItem[] = [
 }))
 
 export async function resetToSeed() {
-  await db.transaction('rw', [db.tasks, db.gear, db.fund, db.resupply, db.training, db.settings, db.route, db.elevation], async () => {
+  await db.transaction('rw', [db.tasks, db.gear, db.fund, db.resupply, db.training, db.settings, db.route, db.elevation, db.photos], async () => {
     await Promise.all([
       db.tasks.clear(),
       db.gear.clear(),
@@ -404,6 +426,7 @@ export async function resetToSeed() {
       db.settings.clear(),
       db.route.clear(),
       db.elevation.clear(),
+      db.photos.clear(),
     ])
     await db.settings.put(defaultSettings)
     await db.tasks.bulkAdd(seedTasks)
