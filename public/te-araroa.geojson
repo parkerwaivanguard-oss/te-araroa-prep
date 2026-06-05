@@ -1,0 +1,31 @@
+{
+  "type": "FeatureCollection",
+  "name": "te-araroa-placeholder",
+  "features": [
+    {
+      "type": "Feature",
+      "properties": {
+        "name": "Te Araroa placeholder route",
+        "source": "Known anchor coordinates only. Replace with the official TA GPX converted to simplified GeoJSON for real use."
+      },
+      "geometry": {
+        "type": "LineString",
+        "coordinates": [
+          [172.6797, -34.4279],
+          [174.7633, -36.8485],
+          [175.6486, -39.1009],
+          [175.045, -39.405],
+          [174.7762, -41.2865],
+          [174.2402, -41.0959],
+          [172.847, -41.806],
+          [171.5639, -42.9447],
+          [170.4762, -44.004],
+          [169.1321, -44.7032],
+          [168.6626, -45.0312],
+          [167.718, -45.4144],
+          [168.334, -46.5996]
+        ]
+      }
+    }
+  ]
+}

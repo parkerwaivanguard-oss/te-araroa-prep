@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { RouteBasemap } from './RouteBasemap'
 import {
   db,
   defaultSettings,
@@ -23,7 +24,7 @@ import {
 
 type Tab = 'Dashboard' | 'Route' | 'Tasks' | 'Gear' | 'Fund' | 'Resupply' | 'Training'
 type RouteFilter = 'All' | 'North Is' | 'South Is' | 'Highlights' | 'Resupply' | 'Hazards' | 'Alternates'
-type RouteViewMode = 'List' | 'Map' | 'Elevation'
+type RouteViewMode = 'List' | 'Art' | 'Map' | 'Elevation'
 type ResupplyFilter = 'All' | 'Mail-a-box' | 'Rest towns' | 'South Is'
 type GearFilter = 'All' | 'Need' | 'Owned' | 'Tested'
 
@@ -435,13 +436,13 @@ function RouteView({ route, elevation, refresh }: { route: RoutePoint[]; elevati
           </div>
           <div className="flex flex-wrap gap-2">
             <Segmented options={routeFilters} value={filter} onChange={(value) => setFilter(value as RouteFilter)} />
-            <Segmented options={['List', 'Map', 'Elevation']} value={mode} onChange={(value) => setMode(value as RouteViewMode)} />
+            <Segmented options={['List', 'Art', 'Map', 'Elevation']} value={mode} onChange={(value) => setMode(value as RouteViewMode)} />
           </div>
         </div>
       </section>
 
       {filter === 'Hazards' && <RiverCrossingWarning />}
-      {mode === 'Map' ? <RouteMap route={visibleRoute} /> : mode === 'Elevation' ? <ElevationProfile elevation={elevation} route={route} /> : (
+      {mode === 'Art' ? <RouteArt route={visibleRoute} /> : mode === 'Map' ? <RouteBasemap route={route} refresh={refresh} /> : mode === 'Elevation' ? <ElevationProfile elevation={elevation} route={route} /> : (
         <section className="grid gap-3">
           {visibleRoute.map((point) => <RouteCard point={point} key={point.id} refresh={refresh} />)}
         </section>
@@ -560,15 +561,15 @@ function HazardTransport({ point }: { point: RoutePoint }) {
   )
 }
 
-function RouteMap({ route }: { route: RoutePoint[] }) {
+function RouteArt({ route }: { route: RoutePoint[] }) {
   const maxKm = Math.max(...route.map((point) => point.km), 3008)
 
   return (
     <section className="panel overflow-hidden">
       <div className="flex items-end justify-between gap-4">
         <div>
-          <p className="section-kicker">Map</p>
-          <h2 className="section-title">Schematic trail line</h2>
+          <p className="section-kicker">Art</p>
+          <h2 className="section-title">Hand-drawn trail line</h2>
         </div>
         <div className="flex flex-wrap gap-2 text-xs">
           {(['milestone', 'section', 'highlight', 'resupply', 'rest', 'hazard'] satisfies RouteKind[]).map((kind) => (

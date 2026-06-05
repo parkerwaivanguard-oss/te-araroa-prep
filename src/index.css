@@ -1,3 +1,5 @@
+@import 'maplibre-gl/dist/maplibre-gl.css';
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -56,5 +58,25 @@ select {
 
   .button-quiet {
     @apply min-h-10 rounded-md border border-line bg-transparent px-3 py-2 text-sm font-semibold text-ink/60 transition hover:border-rust hover:text-rust;
+  }
+
+  .ta-map-popup {
+    @apply grid gap-2 text-sm text-ink;
+  }
+
+  .ta-map-popup h3 {
+    @apply font-serif text-xl leading-tight;
+  }
+
+  .ta-map-popup p {
+    @apply m-0 leading-5 text-ink/70;
+  }
+
+  .ta-map-popup-section {
+    @apply rounded-sm border border-rust bg-rust/5 p-2 text-ink/75;
+  }
+
+  .ta-map-popup button {
+    @apply mt-1 rounded-sm border border-rust bg-rust px-3 py-2 text-sm font-semibold text-paper;
   }
 }
