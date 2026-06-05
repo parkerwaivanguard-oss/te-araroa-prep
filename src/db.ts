@@ -145,7 +145,7 @@ export const defaultSettings: AppSettings = {
   fundTargetNZD: 12000,
   departureDate: '2027-11-01',
   finishDate: '2028-04-01',
-  seedVersion: 4,
+  seedVersion: 7,
 }
 
 export const workstreams: WorkstreamWindow[] = [
@@ -175,7 +175,8 @@ export const seedTasks: Task[] = [
   ['Logistics', 'Apply for NZ Visitor Visa — long stay (thru-hike exceeds 3-month NZeTA limit) [HIGH PRIORITY]', "Travel on HK SAR passport — it's visa-waiver (NZeTA, up to 90 days). A 5-month TA exceeds the 90-day cap, so apply for a long-stay Visitor Visa in advance (standard visa-waiver path — simpler/cheaper than the mainland-China route). Use the SAME passport for NZeTA, visa, and every NZ entry. NZeTA: max 6 months in any 12-month window."],
   ['Logistics', 'Sort satellite beacon (Garmin inReach / ZOLEO) + set scheduled check-in messages', '2-way + SOS. Test before departure; share tracking link with mother Li Ying.'],
   ['Logistics', "Join that year's TA Facebook group + WhatsApp chain", 'Coordinate rides to Cape Reinga / 90 Mile Beach start; real-time trail + river conditions; meet other SOBO hikers.'],
-  ['Logistics', 'Pre-book overlapping/side-trip Great Walk huts (Tongariro, Kepler, Routeburn)', 'Book the moment bookings open — they fill months ahead.'],
+  ['Logistics', 'Great Walk bookings — watch for 2027/28 open date (~mid-2027), book the moment they open', 'MUST book (sell out Dec-Jan): 1) Whanganui River canoe huts/campsites + canoe operator  2) Tongariro — Alpine Crossing slot + Mangatepopo Hut if staying  3) Queen Charlotte Track permit (buy at Picton i-SITE) + campsites. OPTIONAL: Kepler (Te Anau is on-route, +3-4 days). DONE/own arrangements: Routeburn (already walked), Milford (booked May 2026). Most other TA huts = first-come-first-served, just carry the TA Trail Pass + tent.'],
+  ['Logistics', 'Decide: add Kepler Track side trip? (+3-4 days from Te Anau)', 'Lowest-cost Great Walk to add since Te Anau is a resupply stop on-route. Trade-off: eats the tight pre-April finish window.'],
   ['Logistics', 'Buy onward/return flight evidence', 'One-way can be questioned at check-in/border even with a visa. Have proof of onward travel + funds.'],
   ['Finance', 'Open dedicated "TA Fund" account'],
   ['Finance', 'Reach NZD 12,000 target by departure'],
@@ -231,7 +232,7 @@ export const seedRoute: RoutePoint[] = [
   [34, 'Motatapu Track', 'SI', 'Otago', 'section', 2640, 'hard', 'main', 'TA Trust favourite. Steep, remote tussock.'],
   [35, 'Arrowtown / Queenstown', 'SI', 'Otago', 'rest', 2680, 'easy', 'main', 'Full resupply + rest. Adventure-tourism hub.'],
   [36, 'Te Anau', 'SI', 'Southland', 'resupply', 2800, 'easy', 'main', 'Big Four Square. Gateway to Fiordland. Kepler Track side trip.'],
-  [37, 'Kepler Track', 'SI', 'Southland', 'highlight', 2800, 'moderate', 'sidetrip', 'Great Walk; alpine + lake + river. Optional loop.'],
+  [37, 'Kepler Track', 'SI', 'Southland', 'highlight', 2800, 'moderate', 'sidetrip', 'Great Walk; alpine + lake + river. Optional loop. +3-4 days, book Great Walk huts if added.'],
   [38, 'Takitimu / Aparima', 'SI', 'Southland', 'section', 2880, 'moderate', 'main', 'Forest + river valleys.'],
   [39, 'Riverton', 'SI', 'Southland', 'resupply', 2940, 'easy', 'main', 'Coastal resupply.'],
   [40, 'Invercargill', 'SI', 'Southland', 'resupply', 2975, 'easy', 'main', "PAK'nSAVE ~2km off trail. Last city."],
@@ -478,6 +479,22 @@ const v4Tasks: Task[] = [
   { workstream: 'Fitness', title: 'Practise loaded river crossings on Bibbulmun', done: false, notes: "Technique: face upstream, poles for a tripod, unbuckle hip belt, don't cross above waist or faster than walking pace." },
 ]
 
+const v7GreatWalkTask: Task = {
+  workstream: 'Logistics',
+  title: 'Great Walk bookings — watch for 2027/28 open date (~mid-2027), book the moment they open',
+  done: false,
+  notes: 'MUST book (sell out Dec-Jan): 1) Whanganui River canoe huts/campsites + canoe operator  2) Tongariro — Alpine Crossing slot + Mangatepopo Hut if staying  3) Queen Charlotte Track permit (buy at Picton i-SITE) + campsites. OPTIONAL: Kepler (Te Anau is on-route, +3-4 days). DONE/own arrangements: Routeburn (already walked), Milford (booked May 2026). Most other TA huts = first-come-first-served, just carry the TA Trail Pass + tent.',
+}
+
+const v7KeplerDecisionTask: Task = {
+  workstream: 'Logistics',
+  title: 'Decide: add Kepler Track side trip? (+3-4 days from Te Anau)',
+  done: false,
+  notes: 'Lowest-cost Great Walk to add since Te Anau is a resupply stop on-route. Trade-off: eats the tight pre-April finish window.',
+}
+
+const v7KeplerNotes = 'Great Walk; alpine + lake + river. Optional loop. +3-4 days, book Great Walk huts if added.'
+
 export async function upgradeSeedsToV4(settings: AppSettings) {
   await db.transaction('rw', [db.gear, db.tasks, db.settings], async () => {
     const gear = await db.gear.toArray()
@@ -508,6 +525,39 @@ export async function upgradeSeedsToV4(settings: AppSettings) {
   })
 }
 
+export async function upgradeSeedsToV7(settings: AppSettings) {
+  await db.transaction('rw', [db.tasks, db.route, db.settings], async () => {
+    const tasks = await db.tasks.toArray()
+    const greatWalkTask = tasks.find((task) => task.title.includes('Great Walk huts') || task.title.includes('Great Walk bookings'))
+    if (greatWalkTask?.id) {
+      await db.tasks.update(greatWalkTask.id, {
+        workstream: v7GreatWalkTask.workstream,
+        title: v7GreatWalkTask.title,
+        notes: v7GreatWalkTask.notes,
+      })
+    } else {
+      await db.tasks.add(v7GreatWalkTask)
+    }
+
+    const latestTasks = await db.tasks.toArray()
+    const hasKeplerDecision = latestTasks.some((task) => task.title === v7KeplerDecisionTask.title)
+    if (!hasKeplerDecision) {
+      await db.tasks.add(v7KeplerDecisionTask)
+    }
+
+    const route = await db.route.toArray()
+    const kepler = route.find((point) => point.name.includes('Kepler') && point.kind === 'highlight' && point.variant === 'sidetrip' && point.region === 'Southland')
+    if (kepler?.id) {
+      await db.route.update(kepler.id, { notes: v7KeplerNotes })
+    } else {
+      const seed = seedRouteWithTransport.find((point) => point.name === 'Kepler Track')
+      if (seed) await db.route.add({ ...seed, notes: v7KeplerNotes })
+    }
+
+    await db.settings.put({ ...defaultSettings, ...settings, seedVersion: 7 })
+  })
+}
+
 export async function ensureSeeded() {
   const taskCount = await db.tasks.count()
   if (taskCount === 0) {
@@ -524,6 +574,10 @@ export async function ensureSeeded() {
     }
     if ((settings.seedVersion ?? 1) < 4) {
       await upgradeSeedsToV4(settings)
+      settings = { ...defaultSettings, ...((await db.settings.get('app')) ?? {}) }
+    }
+    if ((settings.seedVersion ?? 1) < 7) {
+      await upgradeSeedsToV7(settings)
     } else {
       await db.settings.put(settings)
     }

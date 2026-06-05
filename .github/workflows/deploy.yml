@@ -32,8 +32,6 @@ jobs:
 
       - name: Build
         run: npm run build
-        env:
-          VITE_STADIA_KEY: ${{ secrets.VITE_STADIA_KEY }}
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3

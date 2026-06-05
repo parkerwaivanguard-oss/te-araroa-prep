@@ -20,6 +20,7 @@ const routeSource = `${import.meta.env.BASE_URL}te-araroa.geojson`
 const emptyFeatureCollection: FeatureCollection = { type: 'FeatureCollection', features: [] }
 const emptyLine: LineFeature = { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: [] } }
 const defaultLayerToggles: LayerToggles = { hazards: true, resupply: true, highlights: true, alternates: true, progress: true }
+const useWatercolor = true
 const kindColors: Record<RouteKind, string> = {
   milestone: '#5a4632',
   section: '#8a7a66',
@@ -149,7 +150,6 @@ export function RouteBasemap({ route, refresh }: { route: RoutePoint[]; refresh:
   const [ready, setReady] = useState(false)
   const [error, setError] = useState('')
   const [toggles, setToggles] = useState<LayerToggles>(defaultLayerToggles)
-  const hasStadiaKey = Boolean(import.meta.env.VITE_STADIA_KEY)
 
   useEffect(() => {
     localRouteRef.current = localRoute
@@ -165,16 +165,16 @@ export function RouteBasemap({ route, refresh }: { route: RoutePoint[]; refresh:
   }, [route])
 
   const tileStyle = useMemo(() => {
-    const stadiaKey = import.meta.env.VITE_STADIA_KEY
-    const watercolorTile = `https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}.jpg${stadiaKey ? `?api_key=${encodeURIComponent(stadiaKey)}` : ''}`
+    // Stadia domain auth requires the GitHub Pages host to be whitelisted in the Stadia dashboard.
+    // If tiles 401/403 in production, whitelist the domain or fall back to an API key per Stadia docs.
     return {
       version: 8,
       sources: {
         basemap: {
           type: 'raster',
-          tiles: stadiaKey ? [watercolorTile] : ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
+          tiles: useWatercolor ? ['https://tiles.stadiamaps.com/tiles/stamen_watercolor/{z}/{x}/{y}.jpg'] : ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
           tileSize: 256,
-          attribution: stadiaKey ? '© Stamen © Stadia Maps © OpenStreetMap contributors' : '© OpenStreetMap contributors',
+          attribution: useWatercolor ? '© Stamen Design © Stadia Maps © OpenStreetMap contributors' : '© OpenStreetMap contributors',
         },
       },
       layers: [{ id: 'basemap', type: 'raster', source: 'basemap' }],
@@ -274,20 +274,20 @@ export function RouteBasemap({ route, refresh }: { route: RoutePoint[]; refresh:
           }
 
           const startTime = performance.now()
-	          const animate = (time: number) => {
-	            if (!mapRef.current) return
-	            const progress = Math.min((time - startTime) / 3000, 1)
-	            const source = mapRef.current.getSource('trail') as import('maplibre-gl').GeoJSONSource | undefined
-	            const revealKm = trailLengthKm * progress
-	            const slice = revealKm > 0.001
-	              ? turf.lineSliceAlong(trail, 0, revealKm, { units: 'kilometers' }) as LineFeature
-	              : emptyLine
-	            source?.setData(slice)
-	            if (progress < 1) {
-	              window.requestAnimationFrame(animate)
-            } else {
-              source?.setData(trail)
-              setReady(true)
+          const animate = (time: number) => {
+            if (!mapRef.current) return
+            const progress = Math.min((time - startTime) / 3000, 1)
+            const source = mapRef.current.getSource('trail') as import('maplibre-gl').GeoJSONSource | undefined
+            const revealKm = trailLengthKm * progress
+            const slice = revealKm > 0.001
+              ? turf.lineSliceAlong(trail, 0, revealKm, { units: 'kilometers' }) as LineFeature
+              : emptyLine
+            source?.setData(slice)
+            if (progress < 1) {
+              window.requestAnimationFrame(animate)
+	            } else {
+	              source?.setData(trail)
+	              setReady(true)
             }
           }
           window.requestAnimationFrame(animate)
@@ -360,8 +360,8 @@ export function RouteBasemap({ route, refresh }: { route: RoutePoint[]; refresh:
           <LayerToggle label="Progress" checked={toggles.progress} onChange={(progress) => setToggles((current) => ({ ...current, progress }))} />
         </div>
       </div>
-      {!hasStadiaKey && (
-        <p className="mt-4 rounded-md border border-line bg-bone px-3 py-2 text-sm text-ink/65">Using OSM fallback tiles. Add a Stadia key for the watercolor basemap.</p>
+      {!useWatercolor && (
+        <p className="mt-4 rounded-md border border-line bg-bone px-3 py-2 text-sm text-ink/65">Using OSM fallback tiles. Enable Stadia domain auth for the watercolor basemap.</p>
       )}
       {error && <p className="mt-4 rounded-md border border-rust bg-rust/5 px-3 py-2 text-sm text-rust">{error}</p>}
       <div className="mt-5 h-[620px] min-h-[65vh] overflow-hidden rounded-md border border-line bg-bone">
