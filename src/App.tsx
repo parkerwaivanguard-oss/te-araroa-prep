@@ -36,6 +36,7 @@ const todayIso = () => new Date().toISOString().slice(0, 10)
 const routeFilters: RouteFilter[] = ['All', 'North Is', 'South Is', 'Highlights', 'Resupply', 'Hazards', 'Alternates']
 const resupplyFilters: ResupplyFilter[] = ['All', 'Mail-a-box', 'Rest towns', 'South Is']
 const gearFilters: GearFilter[] = ['All', 'Need', 'Owned', 'Tested']
+const albumCoverImageUrl = 'https://lh3.googleusercontent.com/pw/AP1GczMOk6XJjSazmqfoqEnqxNVYeeNISMkYuR-Hp0cWdXA6zUs6ybj3Aqs5CeN9-CzBpNVsari5JfoJPwEWA6B6t9Zp0YeL5VEuirLnXFDo-l-mvMhPAFeR=w1600-h900-no'
 const barColorClass = {
   teal: 'bg-teal',
   fern: 'bg-fern',
@@ -234,6 +235,7 @@ function App() {
 function Dashboard({ data, stats, refresh }: { data: AppData; stats: Stats; refresh: () => Promise<void> }) {
   return (
     <section className="grid gap-6">
+      <LandingPhoto albumUrl={data.settings.googlePhotosAlbumUrl} />
       <div className="grid gap-4 md:grid-cols-5">
         <Metric title="Days to depart" value={stats.days.toString()} detail="Cape Reinga target" large />
         <Metric title="Route progress" value={`${stats.routeProgress}%`} detail={`${stats.routeDone} / ${data.route.length} waypoints reached`} />
@@ -255,6 +257,31 @@ function Dashboard({ data, stats, refresh }: { data: AppData; stats: Stats; refr
       </section>
       <Gantt />
       <SettingsPanel settings={data.settings} refresh={refresh} />
+    </section>
+  )
+}
+
+function LandingPhoto({ albumUrl }: { albumUrl?: string }) {
+  const photo = (
+    <img
+      className="h-full min-h-[260px] w-full object-cover sm:min-h-[360px] lg:min-h-[430px]"
+      src={albumCoverImageUrl}
+      alt="Queenstown mountain and lake view from the shared Te Araroa photo album"
+    />
+  )
+
+  return (
+    <section className="overflow-hidden rounded-md border border-line bg-paper shadow-hush">
+      {albumUrl ? (
+        <a className="group relative block" href={albumUrl} target="_blank" rel="noreferrer" aria-label="Open shared Google Photos album">
+          {photo}
+          <span className="absolute bottom-4 left-4 rounded-sm bg-ink/85 px-3 py-2 text-sm font-semibold text-paper transition group-hover:bg-rust">
+            Open Google Photos album
+          </span>
+        </a>
+      ) : (
+        photo
+      )}
     </section>
   )
 }
