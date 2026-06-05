@@ -9,7 +9,6 @@ import {
   type FundContribution,
   type GearItem,
   type GearStatus,
-  type PhotoItem,
   type Difficulty,
   type ResupplyPoint,
   type RouteKind,
@@ -22,13 +21,13 @@ import {
   workstreams,
 } from './db'
 
-type Tab = 'Dashboard' | 'Route' | 'Tasks' | 'Gear' | 'Fund' | 'Resupply' | 'Training' | 'Photos'
+type Tab = 'Dashboard' | 'Route' | 'Tasks' | 'Gear' | 'Fund' | 'Resupply' | 'Training'
 type RouteFilter = 'All' | 'North Is' | 'South Is' | 'Highlights' | 'Resupply' | 'Hazards' | 'Alternates'
 type RouteViewMode = 'List' | 'Map' | 'Elevation'
 type ResupplyFilter = 'All' | 'Mail-a-box' | 'Rest towns' | 'South Is'
 type GearFilter = 'All' | 'Need' | 'Owned' | 'Tested'
 
-const tabs: Tab[] = ['Dashboard', 'Route', 'Tasks', 'Gear', 'Fund', 'Resupply', 'Training', 'Photos']
+const tabs: Tab[] = ['Dashboard', 'Route', 'Tasks', 'Gear', 'Fund', 'Resupply', 'Training']
 const workstreamOrder = workstreams.map((stream) => stream.name)
 const currency = new Intl.NumberFormat('en-NZ', { style: 'currency', currency: 'NZD', maximumFractionDigits: 0 })
 const number = new Intl.NumberFormat('en-NZ')
@@ -67,7 +66,6 @@ interface AppData {
   fund: FundContribution[]
   resupply: ResupplyPoint[]
   training: TrainingEntry[]
-  photos: PhotoItem[]
   settings: AppSettings
 }
 
@@ -90,7 +88,6 @@ const emptyData: AppData = {
   fund: [],
   resupply: [],
   training: [],
-  photos: [],
   settings: defaultSettings,
 }
 
@@ -127,7 +124,7 @@ function App() {
   const [offlineReady, setOfflineReady] = useState(false)
 
   const loadData = async () => {
-    const [tasks, gear, route, elevation, fund, resupply, training, photos, settings] = await Promise.all([
+    const [tasks, gear, route, elevation, fund, resupply, training, settings] = await Promise.all([
       db.tasks.orderBy('id').toArray(),
       db.gear.orderBy('id').toArray(),
       db.route.orderBy('seq').toArray(),
@@ -135,10 +132,9 @@ function App() {
       db.fund.orderBy('date').toArray(),
       db.resupply.orderBy('id').toArray(),
       db.training.orderBy('date').toArray(),
-      db.photos.orderBy('date').reverse().toArray(),
       db.settings.get('app'),
     ])
-    setData({ tasks, gear, route, elevation, fund, resupply, training, photos, settings: { ...defaultSettings, ...settings } })
+    setData({ tasks, gear, route, elevation, fund, resupply, training, settings: settings ?? defaultSettings })
   }
 
   useEffect(() => {
@@ -220,7 +216,6 @@ function App() {
         {activeTab === 'Fund' && <FundView data={data} stats={stats} refresh={refresh} />}
         {activeTab === 'Resupply' && <ResupplyView points={data.resupply} refresh={refresh} />}
         {activeTab === 'Training' && <TrainingView entries={data.training} refresh={refresh} />}
-        {activeTab === 'Photos' && <PhotosView photos={data.photos} settings={data.settings} refresh={refresh} />}
       </div>
       {offlineReady && (
         <div className="fixed bottom-4 right-4 z-50 rounded-md border border-rust bg-paper px-4 py-3 text-sm font-semibold text-rust shadow-hush">
@@ -999,92 +994,6 @@ function TrainingView({ entries, refresh }: { entries: TrainingEntry[]; refresh:
         ))}
       </section>
     </section>
-  )
-}
-
-function PhotosView({ photos, settings, refresh }: { photos: PhotoItem[]; settings: AppSettings; refresh: () => Promise<void> }) {
-  const [albumUrl, setAlbumUrl] = useState(settings.googlePhotosAlbumUrl ?? '')
-  const [draft, setDraft] = useState<PhotoItem>({ title: '', src: '', caption: '', date: todayIso() })
-
-  const saveAlbum = async () => {
-    await db.settings.put({ ...settings, googlePhotosAlbumUrl: albumUrl.trim() || undefined })
-    await refresh()
-  }
-
-  const addPhoto = async () => {
-    if (!draft.title.trim() || !draft.src.trim()) return
-    await db.photos.add({
-      title: draft.title.trim(),
-      src: draft.src.trim(),
-      caption: draft.caption?.trim() || undefined,
-      date: draft.date || undefined,
-    })
-    setDraft({ title: '', src: '', caption: '', date: todayIso() })
-    await refresh()
-  }
-
-  return (
-    <section className="grid gap-5">
-      <section className="panel">
-        <div className="flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
-          <div>
-            <p className="section-kicker">Google Photos</p>
-            <h2 className="section-title">Trail album</h2>
-          </div>
-          {settings.googlePhotosAlbumUrl && (
-            <a className="button-primary inline-flex items-center justify-center" href={settings.googlePhotosAlbumUrl} target="_blank" rel="noreferrer">
-              Open album
-            </a>
-          )}
-        </div>
-        <div className="mt-4 grid gap-3 sm:grid-cols-[1fr_auto]">
-          <input className="input" type="url" placeholder="Shared album link" value={albumUrl} onChange={(event) => setAlbumUrl(event.target.value)} />
-          <button className="button-primary" type="button" onClick={saveAlbum}>Save link</button>
-        </div>
-      </section>
-
-      <FormPanel title="Add photo card" kicker="Photos">
-        <input className="input sm:col-span-2" placeholder="Title" value={draft.title} onChange={(event) => setDraft({ ...draft, title: event.target.value })} />
-        <input className="input sm:col-span-3" type="url" placeholder="Image URL" value={draft.src} onChange={(event) => setDraft({ ...draft, src: event.target.value })} />
-        <input className="input" type="date" value={draft.date ?? ''} onChange={(event) => setDraft({ ...draft, date: event.target.value })} />
-        <input className="input sm:col-span-5" placeholder="Caption" value={draft.caption ?? ''} onChange={(event) => setDraft({ ...draft, caption: event.target.value })} />
-        <button className="button-primary" type="button" onClick={addPhoto}>Add</button>
-      </FormPanel>
-
-      <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {photos.length === 0 && (
-          <article className="panel md:col-span-2 xl:col-span-3">
-            <p className="text-sm text-ink/60">No photo cards yet.</p>
-          </article>
-        )}
-        {photos.map((photo) => <PhotoCard key={photo.id} photo={photo} refresh={refresh} />)}
-      </section>
-    </section>
-  )
-}
-
-function PhotoCard({ photo, refresh }: { photo: PhotoItem; refresh: () => Promise<void> }) {
-  const update = async (changes: Partial<PhotoItem>) => {
-    if (!photo.id) return
-    await db.photos.update(photo.id, changes)
-    await refresh()
-  }
-
-  return (
-    <article className="panel overflow-hidden p-0">
-      <img className="aspect-[4/3] w-full bg-bone object-cover" src={photo.src} alt={photo.title} loading="lazy" />
-      <div className="grid gap-3 p-4">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <input className="input font-serif text-xl" value={photo.title} onChange={(event) => update({ title: event.target.value })} />
-            <input className="input mt-2" type="date" value={photo.date ?? ''} onChange={(event) => update({ date: event.target.value || undefined })} />
-          </div>
-          <button className="button-quiet" type="button" onClick={async () => photo.id && db.photos.delete(photo.id).then(refresh)}>Delete</button>
-        </div>
-        <input className="input" value={photo.src} onChange={(event) => update({ src: event.target.value })} />
-        <input className="input" placeholder="Caption" value={photo.caption ?? ''} onChange={(event) => update({ caption: event.target.value || undefined })} />
-      </div>
-    </article>
   )
 }
 
